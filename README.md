@@ -366,10 +366,10 @@ Dense(1) + Sigmoid
 
 | Model | Validation Accuracy | Test Accuracy | CV Mean Accuracy | Training Time |
 |-------|-------------------|---------------|------------------|---------------|
-| Random Forest | 0.XXXX | 0.XXXX | 0.XXXX ± 0.XXXX | ~XX sec |
-| Logistic Regression | 0.XXXX | 0.XXXX | 0.XXXX ± 0.XXXX | ~XX sec |
-| ANN | 0.XXXX | 0.XXXX | N/A | ~XX sec |
-| DNN | 0.XXXX | 0.XXXX | N/A | ~XX sec |
+| Random Forest | 0.9973 | 0.9920 | 0.9892 ± 0.0049 | ~10-15 sec |
+| Logistic Regression | 1.0000 | 0.9920 | 0.9949 ± 0.0052 | ~2-5 sec |
+| ANN | 0.9947 | 0.9761 | N/A | ~30-45 sec |
+| DNN | 0.9947 | 0.9841 | N/A | ~45-60 sec |
 
 *Note: Actual values depend on clustering results and random seed*
 
