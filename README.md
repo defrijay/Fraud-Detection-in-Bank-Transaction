@@ -464,5 +464,3 @@ Based on Random Forest analysis:
 ## 📞 Creator
 
 **Defrizal Yahdiyan Risyad** - defrijay@gmail.com
-
-Project Link: [https://github.com/yourusername/fraud-detection](https://github.com/yourusername/fraud-detection)
