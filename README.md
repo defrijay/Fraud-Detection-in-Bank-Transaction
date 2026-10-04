@@ -2,7 +2,7 @@
 
 ![Cover](assets/cover.jpg)
 
-A fraud detection system for unlabeled bank transaction data. Since no fraud labels exist in the source dataset, the project uses an **unsupervised-to-supervised hybrid pipeline**: clustering algorithms (K-Means, Isolation Forest) first generate a working proxy label by identifying anomalous transactions, and that label is then used to train and compare four supervised models  two classical Machine Learning models and two Deep Learning models.
+**In short:** I built a way to spot suspicious bank transactions, even though the bank has no confirmed fraud examples. First, two methods (K-Means and Isolation Forest) mark the unusual transactions. This gives us a stand-in ("proxy") fraud label. Then four models learn from that label: two standard Machine Learning models and two Deep Learning models. I compare them on accuracy, cost of mistakes, key warning signs, and speed.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ A fraud detection system for unlabeled bank transaction data. Since no fraud lab
    - 6.2 [Top Fraud-Indicating Features](#62-top-fraud-indicating-features)
    - 6.3 [Cost of Getting It Wrong](#63-cost-of-getting-it-wrong)
    - 6.4 [Real-Time Feasibility](#64-real-time-feasibility)
-   - 6.5 [Key Takeaways](#65-key-takeaways)
+   - 6.5 [Key Takeaways (Answers to the Business Questions)](#65-key-takeaways-answers-to-the-business-questions)
 7. [Recommendations](#7-recommendations)
 8. [Conclusion](#8-conclusion)
 9. [Limitations](#9-limitations)
@@ -27,58 +27,63 @@ A fraud detection system for unlabeled bank transaction data. Since no fraud lab
 
 ## 1. Background
 
-Digital banking has made transactions faster and more convenient, but it has also opened the door to more sophisticated fraud. Every fraudulent transaction that slips through represents a direct financial loss to the bank, and repeated incidents chip away at something harder to recover: customer trust. Once customers feel their money isn't safe, they move to a competitor.
+Digital banking made payments faster and easier, but it also gave fraudsters more ways in. Every fraud that slips through means lost money for the bank. Repeated cases also hurt something harder to win back: customer trust.
 
-The bank's current defenses rely mainly on fixed rules  flagging a transaction only when it breaks a predefined threshold. This works against obvious, known fraud patterns, but sophisticated fraudsters adapt quickly and learn to stay just under the radar. Making matters harder, the bank doesn't have a historical record of which past transactions were actually fraudulent, so there is no simple "answer key" to learn from. Any solution has to start by working out which transactions look suspicious before it can be trained to catch them going forward.
+Today the bank mostly uses fixed rules. A transaction is flagged only if it crosses a set limit. That catches known tricks, but fraudsters learn to stay under the limit.
 
-Left unresolved, this gap carries real business cost: losses that can run into the billions of rupiah, reputational damage, exposure to regulatory scrutiny, and investigation teams stretched thin manually reviewing transactions that a smarter system could triage automatically.
+There is also a bigger problem: the bank has no list of past transactions confirmed as fraud. So there is no "answer key" to teach a smarter system. We first have to work out which transactions look suspicious, and only then can we train a system to catch them.
+
+If this stays unsolved, the bank risks lost money, lost customer trust, trouble with regulators, and investigators spending time on reviews that a smarter system could sort automatically.
 
 ---
 
 ## 2. Business Questions
 
-- **Where is the bank most exposed?** Which types of transactions, customers, or channels carry the highest fraud risk right now?
-- **Can we trust an automated system to make the call?** How confident can the bank be that a system trained without historical fraud records is actually flagging the right transactions  and not just unusual-but-legitimate customer behavior?
-- **What should the fraud team actually watch for?** Which customer or transaction signals are the strongest early warning signs, so investigators know where to focus their limited time?
-- **What's the cost of getting it wrong?** How do we balance catching more fraud against the risk of blocking or annoying legitimate customers with false alarms?
-- **Can this scale to real operations?** Is the approach fast and reliable enough to support real-time decisions, rather than only after-the-fact analysis?
+Four questions guide the whole project.
+
+| # | Question | Why it matters |
+|---|---|---|
+| **BQ1** | Can spotting unusual behavior find fraud when we have no labels, and does the result make business sense? | If the fraud label is not trustworthy, every later result is built on sand. |
+| **BQ2** | Which model gives the best balance between catching fraud (recall) and not bothering good customers (precision)? | This decides which model gets used. |
+| **BQ3** | What fraud warning signs can the risk team act on? | It turns a model into alert rules and checklists that investigators can use. |
+| **BQ4** | Is it practical to run in production, and which measure should drive the decision? | It links model quality to real-world limits and the real cost of mistakes. |
 
 ---
 
 ## 3. Dataset
 
-**Source:** [Kaggle  Bank Transaction Dataset for Fraud Detection](https://www.kaggle.com/datasets/valakhorasani/bank-transaction-dataset-for-fraud-detection)
+**Source:** [Kaggle – Bank Transaction Dataset for Fraud Detection](https://www.kaggle.com/datasets/valakhorasani/bank-transaction-dataset-for-fraud-detection)
 
 | Stat | Value |
 |---|---|
 | Samples | 2,512 transactions |
 | Features | 16 columns, no missing values |
-| Transaction amount | $0.26 – $1,919.11 (mean ≈ $298) |
-| Customer age | 18 – 80 years (mean ≈ 45) |
-| Login attempts | 1 – 5 per transaction (95 transactions with 3+ attempts, 3.8% of the data) |
+| Transaction amount | $0.26 – $1,919.11 (average ≈ $298) |
+| Customer age | 18 – 80 years (average ≈ 45) |
+| Login attempts | 1 – 5 per transaction (95 transactions with 3 or more, 3.8% of the data) |
 | Channels | Online, ATM, Branch |
 | Time period | January 2023 – January 2024 |
 
 | Feature | Description |
 |---|---|
-| `TransactionID` | Unique transaction identifier |
-| `AccountID` | Unique account identifier |
-| `TransactionAmount` | Monetary value of the transaction |
-| `TransactionDate` | Timestamp of the transaction |
+| `TransactionID` | Unique transaction ID |
+| `AccountID` | Unique account ID |
+| `TransactionAmount` | Money amount of the transaction |
+| `TransactionDate` | Date and time of the transaction |
 | `TransactionType` | Credit or Debit |
 | `Location` | U.S. city of the transaction |
-| `DeviceID` | Device used for the transaction |
+| `DeviceID` | Device used |
 | `IP Address` | IPv4 address |
-| `MerchantID` | Merchant identifier |
-| `AccountBalance` | Post-transaction balance |
-| `PreviousTransactionDate` | Timestamp of the previous transaction |
-| `Channel` | Transaction channel |
+| `MerchantID` | Merchant ID |
+| `AccountBalance` | Balance after the transaction |
+| `PreviousTransactionDate` | Date and time of the previous transaction |
+| `Channel` | Online, ATM, or Branch |
 | `CustomerAge` | Age of the account holder |
-| `CustomerOccupation` | Occupation of the account holder |
-| `TransactionDuration` | Duration in seconds |
+| `CustomerOccupation` | Job of the account holder |
+| `TransactionDuration` | How long the transaction took, in seconds |
 | `LoginAttempts` | Number of login attempts |
 
-> **Data quality note:** `PreviousTransactionDate` turned out not to be a genuine per-account transaction history field, so it was replaced with a `Time_Since_Last_Transaction` feature computed directly from each account's own sorted transaction records.
+> **Data quality note:** `PreviousTransactionDate` did not make sense. In all 2,512 rows, the "previous" date was *later* than the transaction itself, and every value fell within a 6-minute window on 2024-11-04. It looks like an export timestamp, not a real history. So I replaced it with `Time_Since_Last_Transaction`, calculated from each account's own sorted transactions.
 
 ![Exploratory data overview](assets/eda_overview.png)
 
@@ -86,38 +91,40 @@ Left unresolved, this gap carries real business cost: losses that can run into t
 
 ## 4. Methodology
 
-**Step 1  Data preprocessing**  Timestamps parsed, data checked for missing values (none found) and outliers, and a corrected time-since-last-transaction computed per account.
+**Step 1 – Prepare the data.** Parse the dates, check for missing values (none found) and outliers, and recalculate the time since each account's last transaction.
 
-**Step 2  Feature engineering**
+**Step 2 – Build new features**
 
 | Category | Features |
 |---|---|
-| Temporal | `Transaction_Hour`, `Transaction_Day`, `Transaction_Month`, `Transaction_DayOfWeek` |
-| Behavioral | `Time_Since_Last_Transaction`, `Transaction_Frequency`, `Balance_to_Amount_Ratio` |
-| Encoded | Label-encoded categorical variables (`TransactionType`, `Location`, `Channel`, `CustomerOccupation`) |
+| Time | `Transaction_Hour`, `Transaction_Day`, `Transaction_Month`, `Transaction_DayOfWeek` |
+| Behavior | `Time_Since_Last_Transaction`, `Transaction_Frequency`, `Balance_to_Amount_Ratio` |
+| Encoded | Categories turned into numbers (`TransactionType`, `Location`, `Channel`, `CustomerOccupation`) |
 
-Two feature sets are used for two different jobs: an 8-feature **behavioral-only** set for clustering, and the full 16-feature set (behavioral + demographic + encoded categoricals) for the supervised models.
+Two feature sets are used for two jobs:
+- **Behavior only (8 features)** is used to find unusual transactions.
+- **All features (16)** is used to train the models.
 
-**Step 3  Clustering for label generation**
-- **K-Means** (`n_clusters=2`) was first tried on the *full* feature set (including demographics)  this failed the business-sense test, since the split mainly tracked `CustomerOccupation` and `CustomerAge` rather than fraud behavior (silhouette score 0.099).
-- Restricting K-Means to **behavioral-only features** fixed this: silhouette score jumped to 0.439, and the split was now driven almost entirely by `LoginAttempts`, flagging 95 transactions as high-risk.
-- **Isolation Forest** (`contamination=0.1`) was then run on the same behavioral features as the primary anomaly detector, flagging the 252 transactions (10.0% of the dataset) that are easiest to isolate.
-- Cross-checking the two methods: Cohen's kappa of 0.448 (moderate, chance-corrected agreement), and **87% of the transactions K-Means flagged were independently also flagged by Isolation Forest**  real evidence the working label is behaviorally grounded, not arbitrary.
-- **Isolation Forest on behavioral features** was adopted as the working proxy label for all downstream modeling, with the explicit caveat that it remains a proxy, not confirmed ground truth.
+**Step 3 – Create a working fraud label**
+- **K-Means on all features (including age and job) failed.** The groups just followed `CustomerOccupation` and `CustomerAge`, not fraud (clarity score, called silhouette score, only 0.099).
+- **K-Means on behavior features only worked better.** The score rose to 0.439, and the split was driven almost entirely by `LoginAttempts`. It flagged 95 transactions.
+- **Isolation Forest** (`contamination=0.1`) was then run on the same behavior features. It flagged 252 transactions (10.0% of the data).
+- **Cross-check:** the agreement score between the two methods (Cohen's kappa) is 0.448, which is moderate. **87% of the transactions flagged by K-Means were also flagged by Isolation Forest.** That is real evidence the label is based on behavior and is not random.
+- **Isolation Forest on behavior features became the working label.** It is a stand-in, not confirmed fraud.
 
 ![Isolation Forest flagged-vs-normal profile](assets/isolation_forest_profile_ratio.png)
 ![PCA view of flagged vs. normal transactions](assets/pca_visualization.png)
 
-**Step 4  Model training**  Data is split 70% train (1,759) / 15% validation (376) / 15% test (377) using stratified sampling, preserving a ~10% positive rate across all three splits.
+**Step 4 – Train the models.** The data is split into 70% train (1,759), 15% validation (376), and 15% test (377). Each split keeps about 10% flagged transactions.
 
 ### 4.1 Models
 
 | Model | Type | Notes |
 |---|---|---|
-| Random Forest (100 trees) | Machine Learning | Robust to overfitting, handles non-linear relationships, provides feature importance; evaluated with 5-fold CV |
-| Logistic Regression (L2, max_iter=1000) | Machine Learning | Fast, interpretable baseline; evaluated with 5-fold CV |
-| ANN (4 hidden layers: 128→64→32→16) | Deep Learning | ReLU + BatchNorm + Dropout per layer, sigmoid output, Adam optimizer, binary cross-entropy loss, class weighting (~9x on the minority class), early stopping (patience=10), batch size 32 |
-| DNN (5 hidden layers: 256→128→64→32→16) | Deep Learning | Deeper architecture with higher dropout in early layers for more complex pattern recognition |
+| Random Forest (200 trees) | Machine Learning | Handles complex patterns and shows which features matter. Classes balanced; checked with 5-fold cross-validation. |
+| Logistic Regression | Machine Learning | Fast and easy to explain. Classes balanced; checked with 5-fold cross-validation. |
+| ANN (4 hidden layers: 128→64→32→16) | Deep Learning | ReLU + BatchNorm + Dropout, sigmoid output, Adam optimizer, binary cross-entropy loss, about 9x weight on the flagged class, early stopping (patience 10), batch size 32. |
+| DNN (5 hidden layers: 256→128→64→32→16) | Deep Learning | Deeper than the ANN, with more dropout in the early layers. |
 
 ---
 
@@ -127,8 +134,8 @@ Two feature sets are used for two different jobs: an 8-feature **behavioral-only
 |---|---|
 | Language | Python 3.8+ |
 | Data handling | pandas, numpy |
-| Visualization | matplotlib, seaborn |
-| Classical ML | scikit-learn (KMeans, IsolationForest, RandomForestClassifier, LogisticRegression) |
+| Charts | matplotlib, seaborn |
+| Standard ML | scikit-learn (KMeans, IsolationForest, RandomForestClassifier, LogisticRegression) |
 | Deep Learning | TensorFlow/Keras |
 | Environment | Jupyter Notebook |
 
@@ -138,21 +145,29 @@ Two feature sets are used for two different jobs: an 8-feature **behavioral-only
 
 ### 6.1 Model Performance
 
-On the held-out test set (377 transactions):
+Results on the test set (377 transactions):
 
-| Model | Test Accuracy | Precision (Flagged) | Recall (Flagged) | F1 (Flagged) | ROC-AUC | Latency / txn |
+| Model | Accuracy | Precision (Flagged) | Recall (Flagged) | F1 (Flagged) | ROC-AUC | Time per transaction |
 |---|---|---|---|---|---|---|
 | Random Forest | 0.950 | 0.913 | 0.553 | 0.689 | 0.980 | 0.045 ms |
 | Logistic Regression | 0.934 | 0.618 | 0.895 | 0.731 | 0.975 | 0.002 ms |
 | ANN | 0.958 | 0.775 | 0.816 | 0.795 | 0.982 | 0.916 ms |
 | DNN | 0.968 | 0.810 | 0.895 | 0.850 | 0.988 | 0.915 ms |
 
-*Metrics describe how well each model learned the Isolation Forest proxy label, not confirmed real-world fraud  see [Limitations](#9-limitations).*
+**How to read this:** *Precision* = of the transactions a model flags, how many are right. *Recall* = of all the transactions that should be flagged, how many it catches. *F1* = one score that balances the two.
+
+*These numbers show how well each model learned the stand-in label, not confirmed real-world fraud. See [Limitations](#9-limitations).*
 
 ![Precision/recall/F1 and training time by model](assets/model_metrics_comparison.png)
 ![Confusion matrices for all four models](assets/confusion_matrices.png)
 
-Each model implies a different trade-off: **Random Forest** is precision-heavy (few false alarms, more missed fraud), **Logistic Regression** is recall-heavy (catches more fraud, more false alarms), and **DNN**  the deepest model  comes out ahead on every metric, with **ANN** close behind. On this dataset, the added complexity of deep learning translates into a real F1 gain (+15% for ANN, +23% for DNN over Random Forest), not just theoretical upside.
+Each model makes a different trade-off:
+- **Random Forest** has the highest precision: few false alarms, but it misses more fraud.
+- **Logistic Regression** has high recall: it catches more fraud, but raises more false alarms.
+- **DNN** has the best balance. It has the best F1 (0.850), the best ROC-AUC (0.988), and the best accuracy (0.968). It does *not* win on every metric: Random Forest has higher precision, and Logistic Regression ties it on recall.
+- **ANN** is close behind DNN.
+
+Deep learning gives a real gain here: F1 is +15% for ANN and +23% for DNN compared with Random Forest.
 
 ### 6.2 Top Fraud-Indicating Features
 
@@ -173,17 +188,17 @@ Ranked by Random Forest feature importance:
 
 ![Top 10 fraud indicators](assets/feature_importance.png)
 
-Regrouped by *when the signal is knowable*, **account-level behavior (how the account has been acting over time) accounts for 66.8% of predictive importance, versus 33.2% for transaction-level characteristics** (what a single transaction looks like in isolation)  fraud here looks less like "this one transaction is suspicious" and more like "this account is behaving differently than usual."
+Grouped another way, **account-level behavior (how the account has acted over time) makes up 66.8% of the signal, and transaction-level traits (what one transaction looks like) make up 33.2%.** Fraud here looks less like "this one transaction is odd" and more like "this account is acting differently than usual."
 
 ![Account-level vs. transaction-level importance share](assets/transaction_vs_account_level.png)
 
-A simple, fully transparent interim rule  `LoginAttempts ≥ 1` **and** `Balance_to_Amount_Ratio ≥ 156` (the 90th-percentile thresholds)  already captures 88 of the 252 model-flagged transactions (35%), giving the risk team a cheap sanity check that needs no model at all.
+**A simple rule that needs no model:** `LoginAttempts ≥ 1` **and** `Balance_to_Amount_Ratio ≥ 156` (both are 90th-percentile cutoffs). It catches 88 of the 252 flagged transactions (35%). Note: every transaction in this data has at least 1 login attempt, so in practice the rule depends on the balance ratio.
 
 ### 6.3 Cost of Getting It Wrong
 
-Under illustrative cost assumptions (a missed fraud costs far more than a false alarm), the four models rerank by **total expected cost** rather than by accuracy:
+A missed fraud costs far more than a false alarm. These figures are examples: $500 per missed fraud and $15 per false alarm. When we count cost, the model ranking changes:
 
-| Model | False Negatives (missed fraud) | False Positives (false alarms) | Estimated Cost ($) |
+| Model | Missed fraud | False alarms | Estimated cost ($) |
 |---|---|---|---|
 | DNN | 4 | 8 | 2,120 |
 | Logistic Regression | 4 | 21 | 2,315 |
@@ -192,63 +207,64 @@ Under illustrative cost assumptions (a missed fraud costs far more than a false 
 
 ![Estimated cost per model](assets/cost_comparison.png)
 
-Random Forest's precision advantage backfires here: letting through 17 missed frauds is far more expensive than the false alarms it avoids, making it the **costliest** model despite a respectable accuracy score  a reminder that accuracy alone is the wrong yardstick for a fraud decision. **DNN comes out as the lowest-cost model under these assumptions**, with Logistic Regression a close, far cheaper-to-train second.
+Random Forest's high precision backfires. It avoids false alarms, but the 17 frauds it misses cost far more. So it is the **most expensive** model, even with a decent accuracy score. Accuracy alone is the wrong yardstick for fraud. **DNN has the lowest cost**, and Logistic Regression is a close second and much cheaper to train.
 
 ### 6.4 Real-Time Feasibility
 
-Every model scores a single transaction in well under a millisecond on ordinary CPU hardware (Logistic Regression: ~433,000 transactions/sec single-core; even the slowest, DNN, handles over 1,000/sec)  comfortably inside a typical real-time authorization budget. The gating factor for production is not compute; it's validating the working label and setting a cost-based decision threshold before the system acts with less human oversight.
+Every model scores one transaction in well under a millisecond on an ordinary CPU. Logistic Regression can score about 433,000 transactions per second on one core. Even the slowest models (ANN and DNN) handle over 1,000 per second. That fits comfortably inside a typical real-time approval window.
 
-### 6.5 Key Takeaways
+So speed is not the problem. The real gate to production is checking that the working label is right and setting the alert level from real costs.
 
-- Clustering on the full feature set (including demographics) actively misleads  it rediscovers occupation and age groupings rather than fraud behavior. Restricting to behavioral features and cross-checking two independent methods (K-Means, Isolation Forest) is what makes the resulting proxy label trustworthy enough to build on.
-- Behavioral and account-level signals (login attempts, balance-to-amount ratio, dormancy) dominate the fraud signal  far more than transaction size or demographics.
-- **Deep learning (DNN, then ANN) outperforms the classical models on every ranking metric here**, and DNN is also the lowest-cost model once false negatives and false positives are weighted realistically  Logistic Regression is the cheapest model to train and comes a close second on cost.
-- Random Forest's high precision looks good on paper but is the most expensive choice in practice, because it misses the most fraud  accuracy and precision alone would have picked the wrong model.
-- Every model is fast enough for real-time scoring; the real bottleneck for production is proxy-label validation and threshold selection, not latency.
+### 6.5 Key Takeaways (Answers to the Business Questions)
+
+- **BQ1 – Can we find fraud without labels?** Yes, but only the right way. Using every column, including age and job, misleads: it finds customer groups, not fraud. Using only behavior columns and checking with two methods (87% overlap) gives a label we can build on.
+- **BQ2 – Which model works best?** DNN has the best overall balance and the lowest cost, with ANN close behind. Random Forest looks good on precision but costs the most because it misses the most fraud. Logistic Regression is a cheap, strong alternative.
+- **BQ3 – What should investigators watch?** Behavior signals: login attempts, balance-to-amount ratio, and time since the last transaction. They matter far more than transaction size or customer profile. Account-level behavior carries about two-thirds of the signal.
+- **BQ4 – Can it run in real life?** Yes. Speed is not an issue. The cost of mistakes, not accuracy, should decide which model and which alert level to use.
 
 ---
 
 ## 7. Recommendations
 
-**Label validation**
-- Sample a batch of Isolation-Forest-flagged transactions and have the fraud team manually confirm or reject them, converting the proxy label into partial ground truth.
+**Check the label first**
+- Take a sample of the transactions Isolation Forest flagged and ask the fraud team to confirm or reject them. This turns the stand-in label into partial real ground truth.
 
-**Model & threshold**
-- Set the decision threshold using the bank's real cost matrix (actual fraud-loss and investigation-cost figures), not a default 0.5 cutoff or raw accuracy.
-- Consider DNN or Logistic Regression as the leading candidates on cost; treat Random Forest with caution given its cost profile here.
-- Run hyperparameter tuning and explore SMOTE/ADASYN or class-weighting alternatives for the minority (fraud) class.
+**Choose the model and alert level**
+- Set the alert level from the bank's real cost of a missed fraud and of a false alarm, not from a default 0.5 cutoff or from accuracy.
+- Logistic Regression and DNN cost the least here. Be careful with Random Forest. Start with a pilot that only watches (no blocking), and move to deep learning only if its gain holds up on real labels.
+- Try tuning and other ways to handle the small fraud class, such as SMOTE.
 
-**Operating model**
-- Build a two-tier system: a standing account-risk score (updated continuously as login attempts, balances, and dormancy shift) gating a fast transaction-level check at authorization time.
-- Deploy the simple two-threshold rule as an interim safety net and an ongoing sanity check on the model's outputs.
-- Re-run the exposure/segment breakdown on live data periodically rather than treating any one ranking as permanent.
+**Use two layers of checks**
+- Keep a running risk score for each account (login attempts, balances, and long quiet periods change it over time), plus a fast check on each transaction at approval time.
+- Use the simple two-part rule as a backup and as a sanity check on the model.
 
-**Production readiness**
-- Serialize and version trained models for repeatable deployment; expose the chosen model behind a lightweight synchronous scoring API called during authorization.
-- Route flagged-but-not-blocked transactions to an asynchronous investigation queue rather than the authorization path itself.
-- Add drift monitoring and a scheduled retraining cadence; exclude or closely monitor demographic features in production to limit disparate-impact risk.
+**Get ready for real use**
+- Save and version the trained models, and run the chosen one behind a simple scoring service during approval.
+- Send flagged transactions to an investigation list instead of blocking them right away.
+- Monitor for changes in fraud patterns and retrain on a schedule.
+- Leave out the age and job columns in production, or watch them closely, to avoid unfair treatment of customer groups.
 
 ---
 
 ## 8. Conclusion
 
-This project shows that a hybrid unsupervised-to-supervised approach can produce a workable fraud detection system even when no fraud labels exist upfront. Naive clustering on the full feature set fails outright  it rediscovers demographics, not fraud  but restricting to behavioral features and cross-validating K-Means against Isolation Forest (87% overlap, moderate Cohen's kappa) produces a proxy label with real behavioral grounding, matching known fraud typologies like account takeover and dormant-account reactivation.
+Even without fraud examples, we can build a useful fraud detection system. Grouping on every column fails because it finds customer age and job, not fraud. Using only behavior columns and checking K-Means against Isolation Forest (87% overlap, moderate agreement) gives a label based on real behavior. It matches known fraud patterns such as account takeover and quiet accounts that suddenly become active.
 
-On top of that label, **DNN delivers the strongest overall performance (F1 = 0.850, ROC-AUC = 0.988) and the lowest estimated cost**, with ANN close behind  deep learning's added complexity paid off here, unlike in some smaller-dataset settings. Logistic Regression remains a remarkably strong, near-free-to-train alternative. Random Forest's precision-heavy behavior made it the most expensive model once missed fraud is priced in, illustrating why accuracy or precision alone is the wrong metric to pick a fraud model.
+With that label, **DNN performs best overall (F1 = 0.850, ROC-AUC = 0.988) and has the lowest estimated cost**, with ANN close behind. Logistic Regression is a strong, almost free alternative. Random Forest was the most expensive once missed fraud is counted, which shows why accuracy or precision alone should not pick a fraud model.
 
-Behavioral and account-level signals  not transaction size or demographics  are the strongest fraud indicators, arguing for continuous account-risk monitoring layered with fast transaction-level checks. Latency is a non-issue at this scale; the real gate to production is validating the proxy label against real investigated cases and setting a cost-based threshold before the system operates with reduced human oversight.
+The strongest warning signs come from account behavior, not from transaction size or customer profile. This points to a running account risk score plus a fast check on each transaction. Speed is not an issue. Before going live, the label must be checked against real investigated cases, and the alert level must be set from real costs.
 
 ---
 
 ## 9. Limitations
 
-- The fraud label used throughout is a **proxy generated by an unsupervised method**, not confirmed by a human investigator  every metric describes how well models learned that proxy, not necessarily real-world fraud.
-- This is a relatively small, likely synthetic dataset (2,512 transactions); patterns may not generalize to a bank's actual transaction volume and fraud mix.
-- No concept-drift or monitoring plan has been implemented  a static model will degrade over time without retraining.
-- The illustrative cost figures used above are placeholders and must be replaced with the institution's real loss and investigation-cost data before being used for a threshold decision.
+- The fraud label is a **stand-in made by an unsupervised method**, not confirmed by a human investigator. Every number shows how well the models learned that stand-in, not necessarily real-world fraud.
+- The dataset is small and probably synthetic (2,512 transactions). The patterns may not hold for a real bank's volume and fraud mix.
+- There is no plan yet for changing fraud patterns or monitoring. A fixed model will get worse over time without retraining.
+- The cost figures ($500 per missed fraud, $15 per false alarm) are examples. They must be replaced with the bank's real numbers before setting an alert level.
 
 ---
 
 ## 10. Creator
 
-**Defrizal Yahdiyan Risyad**  defrijay@gmail.com
+**Defrizal Yahdiyan Risyad** – defrijay@gmail.com
